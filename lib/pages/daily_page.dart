@@ -1,9 +1,10 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/src/widgets/container.dart';
-import 'package:flutter/src/widgets/framework.dart';
 import 'package:finance_app/theme/colors.dart';
 import 'package:icon_badge/icon_badge.dart';
+import 'package:intl/intl.dart';
 
 class DailyPage extends StatefulWidget {
   const DailyPage({super.key});
@@ -13,499 +14,434 @@ class DailyPage extends StatefulWidget {
 }
 
 class _DailyPageState extends State<DailyPage> {
+  Future<Map<String, dynamic>> getUserData() async {
+    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      DocumentSnapshot doc =
+      await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      if (doc.exists) {
+        return doc.data() as Map<String, dynamic>;
+      }
+    }
+    return {};
+  }
+
+  Stream<Map<String, double>> getFinancialSummaryStream() {
+    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return Stream.value({'Income': 0.0, 'Expenses': 0.0, 'Loan': 0.0});
+
+    return FirebaseFirestore.instance
+        .collection('transactions')
+        .where('userId', isEqualTo: uid)
+        .snapshots()
+        .map((snapshot) {
+      double income = 0.0;
+      double expenses = 0.0;
+      double loans = 0.0;
+
+      for (var doc in snapshot.docs) {
+        double amount = (doc['amount'] as num?)?.toDouble() ?? 0.0;
+        String category = doc['category']?.toString() ?? '';
+        switch (category) {
+          case 'Income':
+            income += amount;
+            break;
+          case 'Expense':
+            expenses += amount;
+            break;
+          case 'Loan':
+            loans += amount;
+            break;
+        }
+      }
+
+      return {
+        'Income': income,
+        'Expenses': expenses,
+        'Loan': loans,
+      };
+    });
+  }
+
+  Stream<List<Map<String, dynamic>>> getRecentTransactionsStream() {
+    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return Stream.value([]);
+
+    return FirebaseFirestore.instance
+        .collection('transactions')
+        .where('userId', isEqualTo: uid)
+        .orderBy('date', descending: true)
+        .limit(3)
+        .snapshots()
+        .map((snapshot) {
+      return snapshot.docs.map((doc) {
+        return {
+          'category': doc['category']?.toString() ?? 'Unknown',
+          'description': doc['description']?.toString() ?? '',
+          'amount': doc['amount']?.toDouble() ?? 0.0,
+          'icon': _getIconForCategory(doc['category']?.toString() ?? ''),
+        };
+      }).toList();
+    });
+  }
+
+  IconData _getIconForCategory(String category) {
+    switch (category) {
+      case 'Income':
+        return Icons.arrow_downward_rounded;
+      case 'Expense':
+        return Icons.arrow_upward_rounded;
+      case 'Loan':
+        return CupertinoIcons.money_dollar;
+      default:
+        return Icons.error;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (FirebaseAuth.instance.currentUser == null) {
+      return const Center(
+        child: Text(
+          "Please log in to view your data",
+          style: TextStyle(fontSize: 16, color: Colors.black),
+        ),
+      );
+    }
     var size = MediaQuery.of(context).size;
-    return SafeArea(
+    return RefreshIndicator(
+      onRefresh: () async {
+        setState(() {});
+      },
+      child: SafeArea(
         child: SingleChildScrollView(
-      child: Column(
-        children: [
-          Container(
-            margin: EdgeInsets.only(top: 25, left: 25, right: 25, bottom: 10),
-            decoration: BoxDecoration(
-                color: white,
-                borderRadius: BorderRadius.circular(25),
-                boxShadow: [
-                  BoxShadow(
-                    color: grey.withOpacity(0.03),
-                    spreadRadius: 10,
-                    blurRadius: 3,
-                    // changes position of shadow
-                  ),
-                ]),
-            child: Padding(
-              padding: const EdgeInsets.only(
-                  top: 20, bottom: 25, right: 20, left: 20),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [Icon(Icons.bar_chart), Icon(Icons.more_vert)],
-                  ),
-                  SizedBox(
-                    height: 15,
-                  ),
-                  Column(
+          child: Column(
+            children: [
+              Container(
+                margin: const EdgeInsets.only(top: 25, left: 25, right: 25, bottom: 10),
+                decoration: BoxDecoration(
+                  color: white,
+                  borderRadius: BorderRadius.circular(25),
+                  boxShadow: [
+                    BoxShadow(
+                      color: grey.withOpacity(0.03),
+                      spreadRadius: 10,
+                      blurRadius: 3,
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
                     children: [
-                      Container(
-                        width: 70,
-                        height: 70,
-                        decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            image: DecorationImage(
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: const [
+                          Icon(Icons.bar_chart),
+                          Icon(Icons.more_vert),
+                        ],
+                      ),
+                      const SizedBox(height: 15),
+                      Column(
+                        children: [
+                          Container(
+                            width: 70,
+                            height: 70,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              image: DecorationImage(
                                 image: NetworkImage(
-                                    "https://images.unsplash.com/photo-1531256456869-ce942a665e80?ixid=MXwxMjA3fDB8MHxzZWFyY2h8MTI4fHxwcm9maWxlfGVufDB8fDB8&ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=60"),
-                                fit: BoxFit.cover)),
+                                    "https://images.unsplash.com/photo-1531256456869-ce942a665e80"),
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          Container(
+                            width: (size.width - 40) * 0.6,
+                            child: Column(
+                              children: [
+                                FutureBuilder<Map<String, dynamic>>(
+                                  future: getUserData(),
+                                  builder: (context, snapshot) {
+                                    if (snapshot.connectionState ==
+                                        ConnectionState.waiting) {
+                                      return const CircularProgressIndicator();
+                                    }
+                                    if (snapshot.hasError) {
+                                      return Text("Error: ${snapshot.error}");
+                                    }
+                                    String name =
+                                        snapshot.data?['name'] ?? 'User';
+                                    return Text(
+                                      name,
+                                      style: const TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: mainFontColor,
+                                      ),
+                                    );
+                                  },
+                                ),
+                                const SizedBox(height: 10),
+                                const Text(
+                                  "Software Developer",
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: black,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                      SizedBox(
-                        height: 10,
+                      const SizedBox(height: 50),
+                      StreamBuilder<Map<String, double>>(
+                        stream: getFinancialSummaryStream(),
+                        builder: (context, snapshot) {
+                          if (snapshot.connectionState == ConnectionState.waiting) {
+                            return const Center(child: CircularProgressIndicator());
+                          }
+                          if (snapshot.hasError) {
+                            return Center(child: Text("Error: ${snapshot.error}"));
+                          }
+                          if (!snapshot.hasData) {
+                            return const Center(child: Text("No financial data available"));
+                          }
+                          final summary = snapshot.data ?? {'Income': 0.0, 'Expenses': 0.0, 'Loan': 0.0};
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              Column(
+                                children: [
+                                  Text(
+                                    "LKR ${summary['Income']!.toStringAsFixed(2)}",
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: mainFontColor,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  const Text(
+                                    "Income",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w100,
+                                      color: black,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Container(
+                                width: 0.5,
+                                height: 40,
+                                color: black.withOpacity(0.3),
+                              ),
+                              Column(
+                                children: [
+                                  Text(
+                                    "LKR ${summary['Expenses']!.toStringAsFixed(2)}",
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: mainFontColor,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  const Text(
+                                    "Expenses",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w100,
+                                      color: black,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              Container(
+                                width: 0.5,
+                                height: 40,
+                                color: black.withOpacity(0.3),
+                              ),
+                              Column(
+                                children: [
+                                  Text(
+                                    "LKR ${summary['Loan']!.toStringAsFixed(2)}",
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: mainFontColor,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  const Text(
+                                    "Loan",
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w100,
+                                      color: black,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          );
+                        },
                       ),
-                      Container(
-                        width: (size.width - 40) * 0.6,
-                        child: Column(
-                          children: [
-                            Text(
-                              "Anjali Jayasooriya",
-                              style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: mainFontColor),
-                            ),
-                            SizedBox(
-                              height: 10,
-                            ),
-                            Text(
-                              "Software Developer",
-                              style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w500,
-                                  color: black),
-                            ),
-                          ],
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height:10),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 25),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          "Overview",
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20,
+                            color: mainFontColor,
+                          ),
                         ),
-                      )
-                    ],
-                  ),
-                  SizedBox(
+                        IconBadge(
+                          icon: const Icon(Icons.notifications_none),
+                          itemCount: 1,
+                          badgeColor: red,
+                          itemColor: mainFontColor,
+                          hideZero: true,
+                          top: -1,
+                          onTap: () {},
+                        ),
+                      ],
+                    ),
+                    Text(
+                      DateFormat('MMM dd, yyyy').format(DateTime.now()),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        color: mainFontColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 5),
+              StreamBuilder<List<Map<String, dynamic>>>(
+                stream: getRecentTransactionsStream(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Center(child: Text("Error: ${snapshot.error}"));
+                  }
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Center(child: Text("No transactions available"));
+                  }
+                  final transactions = snapshot.data ?? [];
+                  return Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Column(
+                      children: transactions
+                          .asMap()
+                          .entries
+                          .map((entry) => _buildTransactionRow(
+                        size,
+                        entry.value['category'],
+                        entry.value['description'],
+                        "LKR ${entry.value['amount'].toStringAsFixed(2)}",
+                        entry.value['icon'],
+                      ))
+                          .toList(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTransactionRow(
+      Size size, String category, String subtitle, String amount, IconData icon) {
+    return Row(
+      children: [
+        Expanded(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
+            decoration: BoxDecoration(
+              color: white,
+              borderRadius: BorderRadius.circular(25),
+              boxShadow: [
+                BoxShadow(
+                  color: grey.withOpacity(0.03),
+                  spreadRadius: 10,
+                  blurRadius: 3,
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 50,
                     height: 50,
+                    decoration: BoxDecoration(
+                      color: arrowbgColor,
+                      borderRadius: BorderRadius.circular(15),
+                    ),
+                    child: Center(child: Icon(icon)),
                   ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      Column(
-                        children: [
-                          Text(
-                            "\LKR 3200",
-                            style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: mainFontColor),
+                  const SizedBox(width: 15),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          category,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            color: black,
+                            fontWeight: FontWeight.bold,
                           ),
-                          SizedBox(
-                            height: 5,
+                        ),
+                        const SizedBox(height: 5),
+                        Text(
+                          subtitle,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: black.withOpacity(0.5),
+                            fontWeight: FontWeight.w400,
                           ),
-                          Text(
-                            "Income",
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w100,
-                                color: black),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        width: 0.5,
-                        height: 40,
-                        color: black.withOpacity(0.3),
-                      ),
-                      Column(
-                        children: [
-                          Text(
-                            "\LKR 5500",
-                            style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: mainFontColor),
-                          ),
-                          SizedBox(
-                            height: 5,
-                          ),
-                          Text(
-                            "Expenses",
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w100,
-                                color: black),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        width: 0.5,
-                        height: 40,
-                        color: black.withOpacity(0.3),
-                      ),
-                      Column(
-                        children: [
-                          Text(
-                            "\LKR 3890",
-                            style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: mainFontColor),
-                          ),
-                          SizedBox(
-                            height: 5,
-                          ),
-                          Text(
-                            "Loan",
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w100,
-                                color: black),
-                          ),
-                        ],
-                      ),
-                    ],
-                  )
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    amount,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: black,
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
-          SizedBox(
-            height: 10,
-          ),
-          Padding(
-            padding: const EdgeInsets.only(left: 25, right: 25),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  children: [
-                    Row(
-                      children: [
-                         Text("Overview",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                      color: mainFontColor,
-                    )),
-                    IconBadge(
-        icon: Icon(Icons.notifications_none),
-        itemCount: 1,
-        badgeColor: Colors.red,
-        itemColor: mainFontColor,
-        hideZero: true,
-        top: -1,
-        onTap: () {
-          print('test');
-        },
-      ),
-                      ],
-                    )
-                  ],
-                ),
-                // Text("Overview",
-                //     style: TextStyle(
-                //       fontWeight: FontWeight.bold,
-                //       fontSize: 20,
-                //       color: mainFontColor,
-                //     )),
-                Text("Jan 16, 2023",
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      color: mainFontColor,
-                    )),
-              ],
-            ),
-          ),
-          SizedBox(
-            height: 5,
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        margin: EdgeInsets.only(
-                          top: 20,
-                          left: 25,
-                          right: 25,
-                        ),
-                        decoration: BoxDecoration(
-                            color: white,
-                            borderRadius: BorderRadius.circular(25),
-                            boxShadow: [
-                              BoxShadow(
-                                color: grey.withOpacity(0.03),
-                                spreadRadius: 10,
-                                blurRadius: 3,
-                                // changes position of shadow
-                              ),
-                            ]),
-                        child: Padding(
-                          padding: const EdgeInsets.only(
-                              top: 10, bottom: 10, right: 20, left: 20),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 50,
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  color: arrowbgColor,
-                                  borderRadius: BorderRadius.circular(15),
-                                  // shape: BoxShape.circle
-                                ),
-                                child: Center(
-                                    child: Icon(Icons.arrow_upward_rounded)),
-                              ),
-                              SizedBox(
-                                width: 15,
-                              ),
-                              Expanded(
-                                child: Container(
-                                  width: (size.width - 90) * 0.7,
-                                  child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          "Sent",
-                                          style: TextStyle(
-                                              fontSize: 15,
-                                              color: black,
-                                              fontWeight: FontWeight.bold),
-                                        ),
-                                        SizedBox(
-                                          height: 5,
-                                        ),
-                                        Text(
-                                          "Sending Payment to Clients",
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              color: black.withOpacity(0.5),
-                                              fontWeight: FontWeight.w400),
-                                        ),
-                                      ]),
-                                ),
-                              ),
-                              Expanded(
-                                child: Container(
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        "\LKR 150",
-                                        style: TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.bold,
-                                            color: black),
-                                      )
-                                    ],
-                                  ),
-                                ),
-                              )
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(
-                  height: 5,
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        margin: EdgeInsets.only(
-                          top: 10,
-                          left: 25,
-                          right: 25,
-                        ),
-                        decoration: BoxDecoration(
-                            color: white,
-                            borderRadius: BorderRadius.circular(25),
-                            boxShadow: [
-                              BoxShadow(
-                                color: grey.withOpacity(0.03),
-                                spreadRadius: 10,
-                                blurRadius: 3,
-                                // changes position of shadow
-                              ),
-                            ]),
-                        child: Padding(
-                          padding: const EdgeInsets.only(
-                              top: 10, bottom: 10, right: 20, left: 20),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 50,
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  color: arrowbgColor,
-                                  borderRadius: BorderRadius.circular(15),
-                                  // shape: BoxShape.circle
-                                ),
-                                child: Center(
-                                    child: Icon(Icons.arrow_downward_rounded)),
-                              ),
-                              SizedBox(
-                                width: 15,
-                              ),
-                              Expanded(
-                                child: Container(
-                                  width: (size.width - 90) * 0.7,
-                                  child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          "Receive",
-                                          style: TextStyle(
-                                              fontSize: 15,
-                                              color: black,
-                                              fontWeight: FontWeight.bold),
-                                        ),
-                                        SizedBox(
-                                          height: 5,
-                                        ),
-                                        Text(
-                                          "Receiving Payment from company",
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              color: black.withOpacity(0.5),
-                                              fontWeight: FontWeight.w400),
-                                        ),
-                                      ]),
-                                ),
-                              ),
-                              Expanded(
-                                child: Container(
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        "\LKR 250",
-                                        style: TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.bold,
-                                            color: black),
-                                      )
-                                    ],
-                                  ),
-                                ),
-                              )
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                SizedBox(
-                  height: 5,
-                ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        margin: EdgeInsets.only(
-                          top: 10,
-                          left: 25,
-                          right: 25,
-                        ),
-                        decoration: BoxDecoration(
-                            color: white,
-                            borderRadius: BorderRadius.circular(25),
-                            boxShadow: [
-                              BoxShadow(
-                                color: grey.withOpacity(0.03),
-                                spreadRadius: 10,
-                                blurRadius: 3,
-                                // changes position of shadow
-                              ),
-                            ]),
-                        child: Padding(
-                          padding: const EdgeInsets.only(
-                              top: 10, bottom: 10, right: 20, left: 20),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 50,
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  color: arrowbgColor,
-                                  borderRadius: BorderRadius.circular(15),
-                                  // shape: BoxShape.circle
-                                ),
-                                child: Center(
-                                    child: Icon(CupertinoIcons.money_dollar)),
-                              ),
-                              SizedBox(
-                                width: 15,
-                              ),
-                              Expanded(
-                                child: Container(
-                                  width: (size.width - 90) * 0.7,
-                                  child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          "Loan",
-                                          style: TextStyle(
-                                              fontSize: 15,
-                                              color: black,
-                                              fontWeight: FontWeight.bold),
-                                        ),
-                                        SizedBox(
-                                          height: 5,
-                                        ),
-                                        Text(
-                                          "Loan for the Car",
-                                          style: TextStyle(
-                                              fontSize: 12,
-                                              color: black.withOpacity(0.5),
-                                              fontWeight: FontWeight.w400),
-                                        ),
-                                      ]),
-                                ),
-                              ),
-                              Expanded(
-                                child: Container(
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        "\LKR 400",
-                                        style: TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.bold,
-                                            color: black),
-                                      )
-                                    ],
-                                  ),
-                                ),
-                              )
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          )
-        ],
-      ),
-    ));
+        ),
+      ],
+    );
   }
 }
