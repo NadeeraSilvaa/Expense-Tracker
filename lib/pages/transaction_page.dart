@@ -14,6 +14,7 @@ class TransactionPage extends StatefulWidget {
 
 class _TransactionPageState extends State<TransactionPage> {
   String _selectedFilter = 'All';
+  String _selectedDateRange = 'Today';
 
   Stream<List<Map<String, dynamic>>> getTransactionsStream() {
     String? uid = FirebaseAuth.instance.currentUser?.uid;
@@ -31,7 +32,7 @@ class _TransactionPageState extends State<TransactionPage> {
     return query.snapshots().map((snapshot) {
       return snapshot.docs.map((doc) {
         return {
-          'id': doc.id, // Added for delete functionality
+          'id': doc.id,
           'category': doc['category']?.toString() ?? 'Unknown',
           'description': doc['description']?.toString() ?? '',
           'amount': doc['amount']?.toDouble() ?? 0.0,
@@ -53,6 +54,36 @@ class _TransactionPageState extends State<TransactionPage> {
       default:
         return Icons.payment;
     }
+  }
+
+  List<Map<String, dynamic>> filterTransactionsByDateRange(
+      List<Map<String, dynamic>> transactions, String dateRange) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final last7Days = today.subtract(const Duration(days: 7));
+    final last30Days = today.subtract(const Duration(days: 30));
+
+    return transactions.where((transaction) {
+      final transactionDate = (transaction['date'] as DateTime);
+      final transactionDay =
+      DateTime(transactionDate.year, transactionDate.month, transactionDate.day);
+
+      switch (dateRange) {
+        case 'Today':
+          return transactionDay == today;
+        case 'Yesterday':
+          return transactionDay == yesterday;
+        case 'Last 7 Days':
+          return transactionDate.isAfter(last7Days) ||
+              transactionDate.isAtSameMomentAs(last7Days);
+        case 'Last 30 Days':
+          return transactionDate.isAfter(last30Days) ||
+              transactionDate.isAtSameMomentAs(last30Days);
+        default:
+          return true; // For safety, return all if dateRange is invalid
+      }
+    }).toList();
   }
 
   @override
@@ -85,21 +116,7 @@ class _TransactionPageState extends State<TransactionPage> {
                 padding: const EdgeInsets.only(
                     top: 20, bottom: 25, right: 20, left: 20),
                 child: Column(
-                  children: [
-                    // Row(
-                    //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    //   children: [
-                    //     IconButton(
-                    //       icon: const Icon(CupertinoIcons.back, color: black),
-                    //       onPressed: () => Navigator.pop(context),
-                    //     ),
-                    //     IconButton(
-                    //       icon: const Icon(CupertinoIcons.search, color: black),
-                    //       onPressed: () {},
-                    //     ),
-                    //   ],
-                    // ),
-                  ],
+                  children: [],
                 ),
               ),
             ),
@@ -118,7 +135,9 @@ class _TransactionPageState extends State<TransactionPage> {
                     ),
                   ),
                   TextButton(
-                    onPressed: () {},
+                    onPressed: () {
+                      setState(() {}); // Trigger rebuild to refresh data
+                    },
                     child: const Text(
                       "Refresh",
                       style: TextStyle(
@@ -148,13 +167,31 @@ class _TransactionPageState extends State<TransactionPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    "Today",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 20,
-                      color: mainFontColor,
-                    ),
+                  DropdownButton<String>(
+                    value: _selectedDateRange,
+                    items: <String>['Today', 'Yesterday', 'Last 7 Days', 'Last 30 Days']
+                        .map<DropdownMenuItem<String>>((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(
+                          value,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                            color: mainFontColor,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (String? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          _selectedDateRange = newValue;
+                        });
+                      }
+                    },
+                    underline: Container(),
+                    icon: const Icon(Icons.arrow_drop_down, color: mainFontColor),
                   ),
                 ],
               ),
@@ -172,20 +209,15 @@ class _TransactionPageState extends State<TransactionPage> {
                   return const Center(child: Text("No transactions available"));
                 }
 
-                final today = DateTime.now();
-                final transactions = snapshot.data!.where((transaction) {
-                  final transactionDate = transaction['date'] as DateTime;
-                  return transactionDate.year == today.year &&
-                      transactionDate.month == today.month &&
-                      transactionDate.day == today.day;
-                }).toList();
+                final filteredTransactions =
+                filterTransactionsByDateRange(snapshot.data!, _selectedDateRange);
 
-                if (transactions.isEmpty) {
-                  return const Center(child: Text("No transactions for today"));
+                if (filteredTransactions.isEmpty) {
+                  return Center(child: Text("No transactions for $_selectedDateRange"));
                 }
 
                 return Column(
-                  children: transactions.map((transaction) {
+                  children: filteredTransactions.map((transaction) {
                     return Dismissible(
                       key: Key(transaction['id']),
                       background: Container(
@@ -193,8 +225,10 @@ class _TransactionPageState extends State<TransactionPage> {
                         child: const Icon(Icons.delete, color: Colors.white),
                       ),
                       onDismissed: (direction) {
-                        // Implement delete functionality here
-                        // FirebaseFirestore.instance.collection('transactions').doc(transaction['id']).delete();
+                        FirebaseFirestore.instance
+                            .collection('transactions')
+                            .doc(transaction['id'])
+                            .delete();
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text("Transaction deleted")),
                         );
