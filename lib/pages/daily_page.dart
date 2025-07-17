@@ -28,7 +28,7 @@ class _DailyPageState extends State<DailyPage> {
 
   Stream<Map<String, double>> getFinancialSummaryStream() {
     String? uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return Stream.value({'Income': 0.0, 'Expenses': 0.0, 'Loan': 0.0});
+    if (uid == null) return Stream.value({'Income': 0.0, 'Expenses': 0.0, 'Loan': 0.0, 'Loan Payment': 0.0});
 
     return FirebaseFirestore.instance
         .collection('transactions')
@@ -38,6 +38,7 @@ class _DailyPageState extends State<DailyPage> {
       double income = 0.0;
       double expenses = 0.0;
       double loans = 0.0;
+      double loanPayments = 0.0;
 
       for (var doc in snapshot.docs) {
         double amount = (doc['amount'] as num?)?.toDouble() ?? 0.0;
@@ -52,6 +53,9 @@ class _DailyPageState extends State<DailyPage> {
           case 'Loan':
             loans += amount;
             break;
+          case 'Loan Payment':
+            loanPayments += amount;
+            break;
         }
       }
 
@@ -59,6 +63,7 @@ class _DailyPageState extends State<DailyPage> {
         'Income': income,
         'Expenses': expenses,
         'Loan': loans,
+        'Loan Payment': loanPayments,
       };
     });
   }
@@ -93,6 +98,8 @@ class _DailyPageState extends State<DailyPage> {
         return Icons.arrow_upward_rounded;
       case 'Loan':
         return CupertinoIcons.money_dollar;
+      case 'Loan Payment':
+        return Icons.payment_rounded;
       default:
         return Icons.error;
     }
@@ -210,82 +217,26 @@ class _DailyPageState extends State<DailyPage> {
                           if (!snapshot.hasData) {
                             return const Center(child: Text("No financial data available"));
                           }
-                          final summary = snapshot.data ?? {'Income': 0.0, 'Expenses': 0.0, 'Loan': 0.0};
-                          return Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          final summary = snapshot.data ?? {'Income': 0.0, 'Expenses': 0.0, 'Loan': 0.0, 'Loan Payment': 0.0};
+                          final balance = summary['Income']! - summary['Expenses']!;
+                          return Column(
                             children: [
-                              Column(
-                                children: [
-                                  Text(
-                                    "LKR ${summary['Income']!.toStringAsFixed(2)}",
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      color: mainFontColor,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  const Text(
-                                    "Income",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w100,
-                                      color: black,
-                                    ),
-                                  ),
-                                ],
+                              Text(
+                                "LKR ${balance.toStringAsFixed(2)}",
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
+                                  color: balance < 0 ? red : mainFontColor,
+                                ),
                               ),
-                              Container(
-                                width: 0.5,
-                                height: 40,
-                                color: black.withOpacity(0.3),
-                              ),
-                              Column(
-                                children: [
-                                  Text(
-                                    "LKR ${summary['Expenses']!.toStringAsFixed(2)}",
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      color: mainFontColor,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  const Text(
-                                    "Expenses",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w100,
-                                      color: black,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              Container(
-                                width: 0.5,
-                                height: 40,
-                                color: black.withOpacity(0.3),
-                              ),
-                              Column(
-                                children: [
-                                  Text(
-                                    "LKR ${summary['Loan']!.toStringAsFixed(2)}",
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                      color: mainFontColor,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  const Text(
-                                    "Loan",
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w100,
-                                      color: black,
-                                    ),
-                                  ),
-                                ],
+                              const SizedBox(height: 5),
+                              const Text(
+                                "Total Balance",
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                  color: black,
+                                ),
                               ),
                             ],
                           );
@@ -295,7 +246,7 @@ class _DailyPageState extends State<DailyPage> {
                   ),
                 ),
               ),
-              const SizedBox(height:10),
+              const SizedBox(height: 10),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 25),
                 child: Row(

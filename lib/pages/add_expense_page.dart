@@ -36,14 +36,37 @@ class _AddExpensePageState extends State<AddExpensePage> {
     setState(() => _isLoading = true);
     String? uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid != null) {
-      await FirebaseFirestore.instance.collection('transactions').add({
-        'userId': uid,
-        'amount': amount,
-        'description': _description.text,
-        'category': _category,
-        'date': _selectedDate,
-      });
-      Navigator.pop(context);
+      try {
+        await FirebaseFirestore.instance.runTransaction((transaction) async {
+          final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
+          final userDoc = await transaction.get(userRef);
+          double currentLoanBalance = userDoc.exists ? (userDoc.data()!['loanBalance']?.toDouble() ?? 0.0) : 0.0;
+
+          // Update loan balance for Loan or Loan Payment
+          if (_category == 'Loan') {
+            transaction.update(userRef, {'loanBalance': currentLoanBalance + amount});
+          } else if (_category == 'Loan Payment') {
+            if (currentLoanBalance < amount) {
+              throw Exception("Payment exceeds current loan balance");
+            }
+            transaction.update(userRef, {'loanBalance': currentLoanBalance - amount});
+          }
+
+          // Add transaction
+          transaction.set(FirebaseFirestore.instance.collection('transactions').doc(), {
+            'userId': uid,
+            'amount': amount,
+            'description': _description.text,
+            'category': _category,
+            'date': _selectedDate,
+          });
+        });
+        Navigator.pop(context);
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Error: $e")),
+        );
+      }
     }
     setState(() => _isLoading = false);
   }
@@ -74,7 +97,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
-          "Add Expense",
+          "Add Transaction",
           style: TextStyle(color: mainFontColor, fontWeight: FontWeight.bold),
         ),
       ),
@@ -105,7 +128,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
                     value: _category,
                     isExpanded: true,
                     underline: const SizedBox(),
-                    items: ['Expense', 'Income', 'Loan']
+                    items: ['Expense', 'Income', 'Loan', 'Loan Payment']
                         .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                         .toList(),
                     onChanged: (value) => setState(() => _category = value!),

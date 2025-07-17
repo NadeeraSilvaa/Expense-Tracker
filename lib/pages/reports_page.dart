@@ -19,7 +19,7 @@ class ReportsPage extends StatelessWidget {
     for (int i = 5; i >= 0; i--) {
       final date = DateTime(now.year, now.month - i, 1);
       final key = DateFormat('MMM yyyy').format(date);
-      monthlyData[key] = {'Income': 0.0, 'Expense': 0.0, 'Loan': 0.0};
+      monthlyData[key] = {'Income': 0.0, 'Expense': 0.0, 'Loan': 0.0, 'Loan Payment': 0.0};
     }
 
     for (var doc in transactions) {
@@ -28,12 +28,20 @@ class ReportsPage extends StatelessWidget {
       final amount = (doc['amount'] as num?)?.toDouble() ?? 0.0;
       final category = doc['category']?.toString() ?? 'Unknown';
 
-      if (monthlyData.containsKey(key)) {
+      if (monthlyData.containsKey(key) && monthlyData[key]!.containsKey(category)) {
         monthlyData[key]![category] = monthlyData[key]![category]! + amount;
       }
     }
 
     return monthlyData;
+  }
+
+  // Fetch user's loan balance
+  Future<double> _getLoanBalance() async {
+    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return 0.0;
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    return doc.exists ? (doc.data()!['loanBalance']?.toDouble() ?? 0.0) : 0.0;
   }
 
   @override
@@ -68,7 +76,7 @@ class ReportsPage extends StatelessWidget {
             }
 
             var transactions = snapshot.data!.docs;
-            double income = 0, expense = 0, loan = 0;
+            double income = 0, expense = 0, loanPayment = 0;
             for (var doc in transactions) {
               double amount = (doc['amount'] as num?)?.toDouble() ?? 0.0;
               switch (doc['category']) {
@@ -78,8 +86,8 @@ class ReportsPage extends StatelessWidget {
                 case 'Expense':
                   expense += amount;
                   break;
-                case 'Loan':
-                  loan += amount;
+                case 'Loan Payment':
+                  loanPayment += amount;
                   break;
               }
             }
@@ -88,14 +96,15 @@ class ReportsPage extends StatelessWidget {
             final monthlyData = _calculateMonthlyTotals(transactions);
 
             // Check if all pie chart data is zero
-            bool isPieChartEmpty = income == 0 && expense == 0 && loan == 0;
+            bool isPieChartEmpty = income == 0 && expense == 0 && loanPayment == 0;
 
             // Calculate maxY for Bar Chart with fallback
             double maxY = monthlyData.values
                 .map((data) => [
               data['Income']!,
               data['Expense']!,
-              data['Loan']!
+              data['Loan']!,
+              data['Loan Payment']!
             ].reduce((a, b) => a > b ? a : b))
                 .reduce((a, b) => a > b ? a : b);
             maxY = maxY == 0 ? 100 : maxY * 1.2; // Fallback to 100 if no data, else add 20% padding
@@ -110,7 +119,19 @@ class ReportsPage extends StatelessWidget {
                     const SizedBox(height: 20),
                     _buildSummaryCard("Expenses", "LKR ${expense.toStringAsFixed(2)}", red),
                     const SizedBox(height: 20),
-                    _buildSummaryCard("Loan", "LKR ${loan.toStringAsFixed(2)}", blue),
+                    FutureBuilder<double>(
+                      future: _getLoanBalance(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+                        if (snapshot.hasError) {
+                          return Text("Error: ${snapshot.error}");
+                        }
+                        final loanBalance = snapshot.data ?? 0.0;
+                        return _buildSummaryCard("Loan Balance", "LKR ${loanBalance.toStringAsFixed(2)}", blue);
+                      },
+                    ),
                     const SizedBox(height: 30),
                     const Text(
                       "Transaction Distribution",
@@ -151,9 +172,9 @@ class ReportsPage extends StatelessWidget {
                               ),
                             ),
                             PieChartSectionData(
-                              value: loan,
-                              color: blue,
-                              title: "Loan",
+                              value: loanPayment,
+                              color: purple, // Assuming purple is defined in colors.dart, else use #AB47BC
+                              title: "Loan Payment",
                               radius: 80,
                               titleStyle: const TextStyle(
                                 fontSize: 14,
@@ -188,27 +209,32 @@ class ReportsPage extends StatelessWidget {
                             final data = entry.value.value;
                             return BarChartGroupData(
                               x: index,
-                              barsSpace: 4, // Space between bars in the same group
+                              barsSpace: 4,
                               barRods: [
                                 BarChartRodData(
                                   toY: data['Income']!,
                                   color: green,
-                                  width: 8,
+                                  width: 6,
                                 ),
                                 BarChartRodData(
                                   toY: data['Expense']!,
                                   color: red,
-                                  width: 8,
+                                  width: 6,
                                 ),
                                 BarChartRodData(
                                   toY: data['Loan']!,
                                   color: blue,
-                                  width: 8,
+                                  width: 6,
+                                ),
+                                BarChartRodData(
+                                  toY: data['Loan Payment']!,
+                                  color: purple, // Assuming purple is defined in colors.dart
+                                  width: 6,
                                 ),
                               ],
                             );
                           }).toList(),
-                          groupsSpace: 20, // Space between monthly groups
+                          groupsSpace: 20,
                           titlesData: FlTitlesData(
                             leftTitles: AxisTitles(
                               sideTitles: SideTitles(
@@ -264,7 +290,7 @@ class ReportsPage extends StatelessWidget {
                             enabled: true,
                             touchTooltipData: BarTouchTooltipData(
                               getTooltipItem: (group, groupIdx, rod, rodIdx) {
-                                final category = ['Income', 'Expense', 'Loan'][rodIdx];
+                                final category = ['Income', 'Expense', 'Loan', 'Loan Payment'][rodIdx];
                                 return BarTooltipItem(
                                   '$category: LKR ${rod.toY.toStringAsFixed(2)}',
                                   const TextStyle(color: Colors.white),
