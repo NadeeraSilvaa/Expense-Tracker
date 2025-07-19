@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:finance_app/theme/colors.dart';
 import 'package:icon_badge/icon_badge.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../utils/theme_provider.dart';
+
 
 class DailyPage extends StatefulWidget {
   const DailyPage({super.key});
@@ -56,6 +59,10 @@ class _DailyPageState extends State<DailyPage> {
           case 'Loan Payment':
             loanPayments += amount;
             break;
+          default:
+          // Treat custom categories as expenses
+            expenses += amount;
+            break;
         }
       }
 
@@ -101,17 +108,19 @@ class _DailyPageState extends State<DailyPage> {
       case 'Loan Payment':
         return Icons.payment_rounded;
       default:
-        return Icons.error;
+        return Icons.category; // Default icon for custom categories
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
     if (FirebaseAuth.instance.currentUser == null) {
-      return const Center(
+      return Center(
         child: Text(
           "Please log in to view your data",
-          style: TextStyle(fontSize: 16, color: Colors.black),
+          style: TextStyle(
+              fontSize: 16, color: AppColors.black(themeProvider.isDarkMode)),
         ),
       );
     }
@@ -127,11 +136,11 @@ class _DailyPageState extends State<DailyPage> {
               Container(
                 margin: const EdgeInsets.only(top: 25, left: 25, right: 25, bottom: 10),
                 decoration: BoxDecoration(
-                  color: white,
+                  color: AppColors.white(themeProvider.isDarkMode),
                   borderRadius: BorderRadius.circular(25),
                   boxShadow: [
                     BoxShadow(
-                      color: grey.withOpacity(0.03),
+                      color: AppColors.grey(themeProvider.isDarkMode).withOpacity(0.03),
                       spreadRadius: 10,
                       blurRadius: 3,
                     ),
@@ -143,9 +152,9 @@ class _DailyPageState extends State<DailyPage> {
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: const [
-                          Icon(Icons.bar_chart),
-                          Icon(Icons.more_vert),
+                        children: [
+                          Icon(Icons.bar_chart, color: AppColors.black(themeProvider.isDarkMode)),
+                          Icon(Icons.more_vert, color: AppColors.black(themeProvider.isDarkMode)),
                         ],
                       ),
                       const SizedBox(height: 15),
@@ -182,21 +191,21 @@ class _DailyPageState extends State<DailyPage> {
                                         snapshot.data?['name'] ?? 'User';
                                     return Text(
                                       name,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 20,
                                         fontWeight: FontWeight.bold,
-                                        color: mainFontColor,
+                                        color: AppColors.mainFontColor(themeProvider.isDarkMode),
                                       ),
                                     );
                                   },
                                 ),
                                 const SizedBox(height: 10),
-                                const Text(
+                                Text(
                                   "Software Developer",
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w500,
-                                    color: black,
+                                    color: AppColors.black(themeProvider.isDarkMode),
                                   ),
                                 ),
                               ],
@@ -226,16 +235,18 @@ class _DailyPageState extends State<DailyPage> {
                                 style: TextStyle(
                                   fontSize: 20,
                                   fontWeight: FontWeight.bold,
-                                  color: balance < 0 ? red : mainFontColor,
+                                  color: balance < 0
+                                      ? AppColors.red(themeProvider.isDarkMode)
+                                      : AppColors.mainFontColor(themeProvider.isDarkMode),
                                 ),
                               ),
                               const SizedBox(height: 5),
-                              const Text(
+                              Text(
                                 "Total Balance",
                                 style: TextStyle(
                                   fontSize: 14,
                                   fontWeight: FontWeight.w500,
-                                  color: black,
+                                  color: AppColors.black(themeProvider.isDarkMode),
                                 ),
                               ),
                             ],
@@ -254,19 +265,20 @@ class _DailyPageState extends State<DailyPage> {
                   children: [
                     Row(
                       children: [
-                        const Text(
+                        Text(
                           "Overview",
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 20,
-                            color: mainFontColor,
+                            color: AppColors.mainFontColor(themeProvider.isDarkMode),
                           ),
                         ),
                         IconBadge(
-                          icon: const Icon(Icons.notifications_none),
+                          icon: Icon(Icons.notifications_none,
+                              color: AppColors.black(themeProvider.isDarkMode)),
                           itemCount: 1,
-                          badgeColor: red,
-                          itemColor: mainFontColor,
+                          badgeColor: AppColors.red(themeProvider.isDarkMode),
+                          itemColor: AppColors.mainFontColor(themeProvider.isDarkMode),
                           hideZero: true,
                           top: -1,
                           onTap: () {},
@@ -275,10 +287,10 @@ class _DailyPageState extends State<DailyPage> {
                     ),
                     Text(
                       DateFormat('MMM dd, yyyy').format(DateTime.now()),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
-                        color: mainFontColor,
+                        color: AppColors.mainFontColor(themeProvider.isDarkMode),
                       ),
                     ),
                   ],
@@ -310,6 +322,7 @@ class _DailyPageState extends State<DailyPage> {
                         entry.value['description'],
                         "LKR ${entry.value['amount'].toStringAsFixed(2)}",
                         entry.value['icon'],
+                        themeProvider.isDarkMode,
                       ))
                           .toList(),
                     ),
@@ -324,18 +337,18 @@ class _DailyPageState extends State<DailyPage> {
   }
 
   Widget _buildTransactionRow(
-      Size size, String category, String subtitle, String amount, IconData icon) {
+      Size size, String category, String subtitle, String amount, IconData icon, bool isDarkMode) {
     return Row(
       children: [
         Expanded(
           child: Container(
             margin: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
             decoration: BoxDecoration(
-              color: white,
+              color: AppColors.white(isDarkMode),
               borderRadius: BorderRadius.circular(25),
               boxShadow: [
                 BoxShadow(
-                  color: grey.withOpacity(0.03),
+                  color: AppColors.grey(isDarkMode).withOpacity(0.03),
                   spreadRadius: 10,
                   blurRadius: 3,
                 ),
@@ -349,10 +362,11 @@ class _DailyPageState extends State<DailyPage> {
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
-                      color: arrowbgColor,
+                      color: AppColors.arrowBgColor(isDarkMode),
                       borderRadius: BorderRadius.circular(15),
                     ),
-                    child: Center(child: Icon(icon)),
+                    child: Center(
+                        child: Icon(icon, color: AppColors.mainFontColor(isDarkMode))),
                   ),
                   const SizedBox(width: 15),
                   Expanded(
@@ -361,9 +375,9 @@ class _DailyPageState extends State<DailyPage> {
                       children: [
                         Text(
                           category,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
-                            color: black,
+                            color: AppColors.black(isDarkMode),
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -372,7 +386,7 @@ class _DailyPageState extends State<DailyPage> {
                           subtitle,
                           style: TextStyle(
                             fontSize: 12,
-                            color: black.withOpacity(0.5),
+                            color: AppColors.black(isDarkMode).withOpacity(0.5),
                             fontWeight: FontWeight.w400,
                           ),
                         ),
@@ -381,10 +395,10 @@ class _DailyPageState extends State<DailyPage> {
                   ),
                   Text(
                     amount,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      color: black,
+                      color: AppColors.black(isDarkMode),
                     ),
                   ),
                 ],

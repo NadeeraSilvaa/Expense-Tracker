@@ -1,8 +1,10 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:finance_app/pages/home_page.dart';
-import 'package:finance_app/pages/register_page.dart';
 import 'package:finance_app/theme/colors.dart';
+import 'package:provider/provider.dart';
+import '../utils/theme_provider.dart';
+
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -17,52 +19,46 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
 
   Future<void> _login() async {
-    if (_email.text.isEmpty || _password.text.isEmpty) {
+    if (_email.text.trim().isEmpty || _password.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please fill in all fields")),
       );
       return;
     }
-    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(_email.text)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a valid email address")),
-      );
-      return;
-    }
+
     setState(() => _isLoading = true);
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _email.text,
-        password: _password.text,
+        email: _email.text.trim(),
+        password: _password.text.trim(),
       );
-      Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (context) => const HomePage()));
-    } on FirebaseAuthException catch (e) {
-      String message = e.code == 'user-not-found'
-          ? 'No user found for that email'
-          : e.code == 'wrong-password'
-          ? 'Wrong password provided'
-          : 'Login failed';
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
-    } finally {
-      setState(() => _isLoading = false);
+      Navigator.pushReplacementNamed(context, '/home');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Login failed: $e")),
+      );
     }
+    setState(() => _isLoading = false);
   }
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
     return Scaffold(
-      backgroundColor: primary,
+      backgroundColor: AppColors.primary(themeProvider.isDarkMode),
+      appBar: AppBar(
+        backgroundColor: AppColors.primary(themeProvider.isDarkMode),
+        elevation: 0,
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(25),
             child: Column(
               children: [
-                const SizedBox(height: 50),
                 Container(
-                  width: 70,
-                  height: 70,
+                  width: 100,
+                  height: 100,
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
                     image: DecorationImage(
@@ -72,120 +68,39 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 50),
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.symmetric(horizontal: 25),
-                  decoration: BoxDecoration(
-                    color: white,
-                    borderRadius: BorderRadius.circular(25),
-                    boxShadow: [
-                      BoxShadow(
-                        color: grey.withOpacity(0.03),
-                        spreadRadius: 10,
-                        blurRadius: 3,
-                      ),
-                    ],
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 20, top: 15, bottom: 5, right: 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Email Address",
-                          style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 13,
-                            color: Color(0xff67727d),
-                          ),
-                        ),
-                        TextField(
-                          controller: _email,
-                          cursorColor: black,
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w500,
-                            color: black,
-                          ),
-                          decoration: const InputDecoration(
-                            prefixIcon: Icon(Icons.email_outlined),
-                            prefixIconColor: black,
-                            hintText: "Email",
-                            border: InputBorder.none,
-                          ),
-                        ),
-                      ],
-                    ),
+                const SizedBox(height: 10),
+                Text(
+                  "Login to Your Account",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.mainFontColor(themeProvider.isDarkMode),
                   ),
                 ),
                 const SizedBox(height: 20),
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.symmetric(horizontal: 25),
-                  decoration: BoxDecoration(
-                    color: white,
-                    borderRadius: BorderRadius.circular(25),
-                    boxShadow: [
-                      BoxShadow(
-                        color: grey.withOpacity(0.03),
-                        spreadRadius: 10,
-                        blurRadius: 3,
-                      ),
-                    ],
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 20, top: 15, bottom: 5, right: 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          "Password",
-                          style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 13,
-                            color: Color(0xff67727d),
-                          ),
-                        ),
-                        TextField(
-                          obscureText: true,
-                          controller: _password,
-                          cursorColor: black,
-                          style: const TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w500,
-                            color: black,
-                          ),
-                          decoration: const InputDecoration(
-                            prefixIcon: Icon(Icons.lock_outline_rounded),
-                            prefixIconColor: black,
-                            suffixIcon: Icon(Icons.remove_red_eye_outlined),
-                            suffixIconColor: black,
-                            hintText: "Password",
-                            border: InputBorder.none,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                _buildTextField(
+                    "Email", _email, Icons.email, themeProvider.isDarkMode),
+                const SizedBox(height: 20),
+                _buildTextField(
+                    "Password", _password, Icons.lock, themeProvider.isDarkMode,
+                    obscureText: true),
                 const SizedBox(height: 20),
                 _isLoading
-                    ? const CircularProgressIndicator()
+                    ? CircularProgressIndicator(
+                    color: AppColors.buttonColor(themeProvider.isDarkMode))
                     : GestureDetector(
                   onTap: _login,
                   child: Container(
                     padding: const EdgeInsets.all(16),
-                    margin: const EdgeInsets.symmetric(horizontal: 25),
                     decoration: BoxDecoration(
-                      color: buttoncolor,
+                      color: AppColors.buttonColor(themeProvider.isDarkMode),
                       borderRadius: BorderRadius.circular(25),
                     ),
-                    child: const Center(
+                    child: Center(
                       child: Text(
                         "Login",
                         style: TextStyle(
-                          color: white,
+                          color: AppColors.white(themeProvider.isDarkMode),
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
@@ -194,41 +109,84 @@ class _LoginPageState extends State<LoginPage> {
                   ),
                 ),
                 const SizedBox(height: 20),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 26.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) => const RegisterPage())),
-                        child: const Text(
-                          "Signup",
-                          style: TextStyle(
-                            color: blue,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            decoration: TextDecoration.underline,
-                          ),
-                        ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      "Don't have an account? ",
+                      style: TextStyle(
+                        color: AppColors.black(themeProvider.isDarkMode)
+                            .withOpacity(0.5),
+                        fontSize: 14,
                       ),
-                      const Text(
-                        "Forgot Password?",
+                    ),
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.pushNamed(context, '/register');
+                      },
+                      child: Text(
+                        "Register",
                         style: TextStyle(
-                          color: black,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w300,
+                          color: AppColors.buttonColor(themeProvider.isDarkMode),
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 20),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(
+      String label, TextEditingController controller, IconData icon, bool isDarkMode,
+      {bool obscureText = false}) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white(isDarkMode),
+        borderRadius: BorderRadius.circular(25),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.grey(isDarkMode).withOpacity(0.03),
+            spreadRadius: 10,
+            blurRadius: 3,
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w500,
+                fontSize: 13,
+                color: AppColors.grey(isDarkMode).withOpacity(0.7),
+              ),
+            ),
+            TextField(
+              controller: controller,
+              cursorColor: AppColors.black(isDarkMode),
+              obscureText: obscureText,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w500,
+                color: AppColors.black(isDarkMode),
+              ),
+              decoration: InputDecoration(
+                prefixIcon: Icon(icon, color: AppColors.black(isDarkMode)),
+                hintText: label,
+                border: InputBorder.none,
+              ),
+            ),
+          ],
         ),
       ),
     );

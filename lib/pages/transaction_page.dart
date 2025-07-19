@@ -4,6 +4,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:finance_app/theme/colors.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../utils/theme_provider.dart';
+
 
 class TransactionPage extends StatefulWidget {
   const TransactionPage({super.key});
@@ -15,6 +18,34 @@ class TransactionPage extends StatefulWidget {
 class _TransactionPageState extends State<TransactionPage> {
   String _selectedFilter = 'All';
   String _selectedDateRange = 'Today';
+  List<String> _categories = ['All', 'Income', 'Expense', 'Loan', 'Loan Payment'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      var snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('categories')
+          .get();
+      setState(() {
+        _categories = [
+          'All',
+          'Income',
+          'Expense',
+          'Loan',
+          'Loan Payment',
+          ...snapshot.docs.map((doc) => doc['name'] as String)
+        ];
+      });
+    }
+  }
 
   Stream<List<Map<String, dynamic>>> getTransactionsStream() {
     String? uid = FirebaseAuth.instance.currentUser?.uid;
@@ -51,8 +82,10 @@ class _TransactionPageState extends State<TransactionPage> {
         return Icons.arrow_upward_rounded;
       case 'Loan':
         return CupertinoIcons.money_dollar;
-      default:
+      case 'Loan Payment':
         return Icons.payment;
+      default:
+        return Icons.category;
     }
   }
 
@@ -81,21 +114,23 @@ class _TransactionPageState extends State<TransactionPage> {
           return transactionDate.isAfter(last30Days) ||
               transactionDate.isAtSameMomentAs(last30Days);
         default:
-          return true; // For safety, return all if dateRange is invalid
+          return true;
       }
     }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
     return Scaffold(
-      backgroundColor: primary,
+      backgroundColor: AppColors.primary(themeProvider.isDarkMode),
       body: getBody(),
     );
   }
 
   Widget getBody() {
     var size = MediaQuery.of(context).size;
+    final themeProvider = Provider.of<ThemeProvider>(context);
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -103,10 +138,10 @@ class _TransactionPageState extends State<TransactionPage> {
           children: [
             Container(
               decoration: BoxDecoration(
-                color: primary,
+                color: AppColors.primary(themeProvider.isDarkMode),
                 boxShadow: [
                   BoxShadow(
-                    color: grey.withOpacity(0.01),
+                    color: AppColors.grey(themeProvider.isDarkMode).withOpacity(0.01),
                     spreadRadius: 10,
                     blurRadius: 3,
                   ),
@@ -126,24 +161,24 @@ class _TransactionPageState extends State<TransactionPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     "Recent Transactions",
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 20,
-                      color: mainFontColor,
+                      color: AppColors.mainFontColor(themeProvider.isDarkMode),
                     ),
                   ),
                   TextButton(
                     onPressed: () {
                       setState(() {}); // Trigger rebuild to refresh data
                     },
-                    child: const Text(
+                    child: Text(
                       "Refresh",
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
-                        color: mainFontColor,
+                        color: AppColors.mainFontColor(themeProvider.isDarkMode),
                       ),
                     ),
                   ),
@@ -152,14 +187,17 @@ class _TransactionPageState extends State<TransactionPage> {
             ),
             Padding(
               padding: const EdgeInsets.only(top: 5, bottom: 20, left: 25, right: 25),
-              child: Row(
-                children: [
-                  _buildFilterButton("All"),
-                  const SizedBox(width: 10),
-                  _buildFilterButton("Income"),
-                  const SizedBox(width: 10),
-                  _buildFilterButton("Expense"),
-                ],
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _categories
+                      .map((filter) => [
+                    _buildFilterButton(filter, themeProvider.isDarkMode),
+                    const SizedBox(width: 10),
+                  ])
+                      .expand((element) => element)
+                      .toList(),
+                ),
               ),
             ),
             Padding(
@@ -175,10 +213,10 @@ class _TransactionPageState extends State<TransactionPage> {
                         value: value,
                         child: Text(
                           value,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w600,
                             fontSize: 16,
-                            color: mainFontColor,
+                            color: AppColors.mainFontColor(themeProvider.isDarkMode),
                           ),
                         ),
                       );
@@ -191,7 +229,8 @@ class _TransactionPageState extends State<TransactionPage> {
                       }
                     },
                     underline: Container(),
-                    icon: const Icon(Icons.arrow_drop_down, color: mainFontColor),
+                    icon: Icon(Icons.arrow_drop_down,
+                        color: AppColors.mainFontColor(themeProvider.isDarkMode)),
                   ),
                 ],
               ),
@@ -213,7 +252,12 @@ class _TransactionPageState extends State<TransactionPage> {
                 filterTransactionsByDateRange(snapshot.data!, _selectedDateRange);
 
                 if (filteredTransactions.isEmpty) {
-                  return Center(child: Text("No transactions for $_selectedDateRange"));
+                  return Center(
+                      child: Text(
+                        "No transactions for $_selectedDateRange",
+                        style: TextStyle(
+                            color: AppColors.black(themeProvider.isDarkMode)),
+                      ));
                 }
 
                 return Column(
@@ -221,8 +265,9 @@ class _TransactionPageState extends State<TransactionPage> {
                     return Dismissible(
                       key: Key(transaction['id']),
                       background: Container(
-                        color: Colors.red,
-                        child: const Icon(Icons.delete, color: Colors.white),
+                        color: AppColors.red(themeProvider.isDarkMode),
+                        child: Icon(Icons.delete,
+                            color: AppColors.white(themeProvider.isDarkMode)),
                       ),
                       onDismissed: (direction) {
                         FirebaseFirestore.instance
@@ -239,6 +284,7 @@ class _TransactionPageState extends State<TransactionPage> {
                         transaction['description'],
                         "LKR ${transaction['amount'].toStringAsFixed(2)}",
                         transaction['icon'],
+                        themeProvider.isDarkMode,
                       ),
                     );
                   }).toList(),
@@ -251,7 +297,7 @@ class _TransactionPageState extends State<TransactionPage> {
     );
   }
 
-  Widget _buildFilterButton(String filter) {
+  Widget _buildFilterButton(String filter, bool isDarkMode) {
     return GestureDetector(
       onTap: () {
         setState(() {
@@ -262,11 +308,13 @@ class _TransactionPageState extends State<TransactionPage> {
         padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 5),
         margin: const EdgeInsets.symmetric(horizontal: 5),
         decoration: BoxDecoration(
-          color: _selectedFilter == filter ? buttoncolor : white,
+          color: _selectedFilter == filter
+              ? AppColors.buttonColor(isDarkMode)
+              : AppColors.white(isDarkMode),
           borderRadius: BorderRadius.circular(25),
           boxShadow: [
             BoxShadow(
-              color: grey.withOpacity(0.03),
+              color: AppColors.grey(isDarkMode).withOpacity(0.03),
               spreadRadius: 10,
               blurRadius: 3,
             ),
@@ -277,8 +325,8 @@ class _TransactionPageState extends State<TransactionPage> {
             filter,
             style: TextStyle(
               color: _selectedFilter == filter
-                  ? Colors.white
-                  : Colors.black.withOpacity(0.5),
+                  ? AppColors.white(isDarkMode)
+                  : AppColors.black(isDarkMode).withOpacity(0.5),
               fontSize: 13,
               fontWeight: FontWeight.w600,
             ),
@@ -289,18 +337,18 @@ class _TransactionPageState extends State<TransactionPage> {
   }
 
   Widget _buildTransactionRow(
-      Size size, String category, String subtitle, String amount, IconData icon) {
+      Size size, String category, String subtitle, String amount, IconData icon, bool isDarkMode) {
     return Row(
       children: [
         Expanded(
           child: Container(
             margin: const EdgeInsets.only(top: 10, left: 25, right: 25),
             decoration: BoxDecoration(
-              color: white,
+              color: AppColors.white(isDarkMode),
               borderRadius: BorderRadius.circular(25),
               boxShadow: [
                 BoxShadow(
-                  color: grey.withOpacity(0.03),
+                  color: AppColors.grey(isDarkMode).withOpacity(0.03),
                   spreadRadius: 10,
                   blurRadius: 3,
                 ),
@@ -314,10 +362,15 @@ class _TransactionPageState extends State<TransactionPage> {
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
-                      color: arrowbgColor,
+                      color: AppColors.arrowBgColor(isDarkMode),
                       borderRadius: BorderRadius.circular(15),
                     ),
-                    child: Center(child: Icon(icon, color: mainFontColor)),
+                    child: Center(
+                      child: Icon(
+                        icon,
+                        color: AppColors.mainFontColor(isDarkMode),
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -329,9 +382,9 @@ class _TransactionPageState extends State<TransactionPage> {
                         children: [
                           Text(
                             category,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 15,
-                              color: black,
+                              color: AppColors.black(isDarkMode),
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -340,7 +393,7 @@ class _TransactionPageState extends State<TransactionPage> {
                             subtitle,
                             style: TextStyle(
                               fontSize: 12,
-                              color: black.withOpacity(0.5),
+                              color: AppColors.black(isDarkMode).withOpacity(0.5),
                               fontWeight: FontWeight.w400,
                             ),
                           ),
@@ -350,10 +403,10 @@ class _TransactionPageState extends State<TransactionPage> {
                   ),
                   Text(
                     amount,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
-                      color: black,
+                      color: AppColors.black(isDarkMode),
                     ),
                   ),
                 ],

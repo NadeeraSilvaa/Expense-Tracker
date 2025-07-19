@@ -4,6 +4,9 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:finance_app/theme/colors.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
+import '../utils/theme_provider.dart';
+
 
 class AddExpensePage extends StatefulWidget {
   const AddExpensePage({super.key});
@@ -18,6 +21,36 @@ class _AddExpensePageState extends State<AddExpensePage> {
   String _category = 'Expense';
   DateTime _selectedDate = DateTime.now();
   bool _isLoading = false;
+  List<String> _categories = ['Expense', 'Income', 'Loan', 'Loan Payment'];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    String? uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      var snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('categories')
+          .get();
+      setState(() {
+        _categories = [
+          'Expense',
+          'Income',
+          'Loan',
+          'Loan Payment',
+          ...snapshot.docs.map((doc) => doc['name'] as String)
+        ];
+        if (!_categories.contains(_category)) {
+          _category = _categories[0];
+        }
+      });
+    }
+  }
 
   Future<void> _addExpense() async {
     if (_amount.text.isEmpty || _description.text.isEmpty) {
@@ -41,6 +74,7 @@ class _AddExpensePageState extends State<AddExpensePage> {
           final userRef = FirebaseFirestore.instance.collection('users').doc(uid);
           final userDoc = await transaction.get(userRef);
           double currentLoanBalance = userDoc.exists ? (userDoc.data()!['loanBalance']?.toDouble() ?? 0.0) : 0.0;
+          double expenseLimit = userDoc.exists ? (userDoc.data()!['expenseLimit']?.toDouble() ?? double.infinity) : double.infinity;
 
           // Update loan balance for Loan or Loan Payment
           if (_category == 'Loan') {
@@ -50,6 +84,28 @@ class _AddExpensePageState extends State<AddExpensePage> {
               throw Exception("Payment exceeds current loan balance");
             }
             transaction.update(userRef, {'loanBalance': currentLoanBalance - amount});
+          }
+
+          // Check expense limit if category is Expense
+          if (_category == 'Expense') {
+            final now = DateTime.now();
+            final firstDayOfMonth = DateTime(now.year, now.month, 1);
+            final snapshot = await FirebaseFirestore.instance
+                .collection('transactions')
+                .where('userId', isEqualTo: uid)
+                .where('category', isEqualTo: 'Expense')
+                .where('date', isGreaterThanOrEqualTo: firstDayOfMonth)
+                .get();
+            double monthlyExpense = snapshot.docs.fold(
+                0.0, (sum, doc) => sum + (doc['amount']?.toDouble() ?? 0.0));
+            monthlyExpense += amount;
+            if (monthlyExpense > expenseLimit) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                    content: Text(
+                        "Warning: Monthly expense limit of LKR $expenseLimit exceeded! Current: LKR ${monthlyExpense.toStringAsFixed(2)}")),
+              );
+            }
           }
 
           // Add transaction
@@ -87,18 +143,21 @@ class _AddExpensePageState extends State<AddExpensePage> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
     return Scaffold(
-      backgroundColor: primary,
+      backgroundColor: AppColors.primary(themeProvider.isDarkMode),
       appBar: AppBar(
-        backgroundColor: primary,
+        backgroundColor: AppColors.primary(themeProvider.isDarkMode),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(CupertinoIcons.back, color: black),
+          icon: Icon(CupertinoIcons.back, color: AppColors.black(themeProvider.isDarkMode)),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
+        title: Text(
           "Add Transaction",
-          style: TextStyle(color: mainFontColor, fontWeight: FontWeight.bold),
+          style: TextStyle(
+              color: AppColors.mainFontColor(themeProvider.isDarkMode),
+              fontWeight: FontWeight.bold),
         ),
       ),
       body: SafeArea(
@@ -107,18 +166,18 @@ class _AddExpensePageState extends State<AddExpensePage> {
             padding: const EdgeInsets.all(25),
             child: Column(
               children: [
-                _buildTextField("Amount", _amount, Icons.money),
+                _buildTextField("Amount", _amount, Icons.money, themeProvider.isDarkMode),
                 const SizedBox(height: 20),
-                _buildTextField("Description", _description, Icons.description),
+                _buildTextField("Description", _description, Icons.description, themeProvider.isDarkMode),
                 const SizedBox(height: 20),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   decoration: BoxDecoration(
-                    color: white,
+                    color: AppColors.white(themeProvider.isDarkMode),
                     borderRadius: BorderRadius.circular(25),
                     boxShadow: [
                       BoxShadow(
-                        color: grey.withOpacity(0.03),
+                        color: AppColors.grey(themeProvider.isDarkMode).withOpacity(0.03),
                         spreadRadius: 10,
                         blurRadius: 3,
                       ),
@@ -128,10 +187,12 @@ class _AddExpensePageState extends State<AddExpensePage> {
                     value: _category,
                     isExpanded: true,
                     underline: const SizedBox(),
-                    items: ['Expense', 'Income', 'Loan', 'Loan Payment']
+                    items: _categories
                         .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                         .toList(),
                     onChanged: (value) => setState(() => _category = value!),
+                    style: TextStyle(color: AppColors.black(themeProvider.isDarkMode)),
+                    dropdownColor: AppColors.white(themeProvider.isDarkMode),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -140,11 +201,11 @@ class _AddExpensePageState extends State<AddExpensePage> {
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: white,
+                      color: AppColors.white(themeProvider.isDarkMode),
                       borderRadius: BorderRadius.circular(25),
                       boxShadow: [
                         BoxShadow(
-                          color: grey.withOpacity(0.03),
+                          color: AppColors.grey(themeProvider.isDarkMode).withOpacity(0.03),
                           spreadRadius: 10,
                           blurRadius: 3,
                         ),
@@ -155,9 +216,12 @@ class _AddExpensePageState extends State<AddExpensePage> {
                       children: [
                         Text(
                           "Date: ${DateFormat('MMM dd, yyyy').format(_selectedDate)}",
-                          style: const TextStyle(fontSize: 16),
+                          style: TextStyle(
+                              fontSize: 16,
+                              color: AppColors.black(themeProvider.isDarkMode)),
                         ),
-                        const Icon(Icons.calendar_today),
+                        Icon(Icons.calendar_today,
+                            color: AppColors.black(themeProvider.isDarkMode)),
                       ],
                     ),
                   ),
@@ -170,14 +234,14 @@ class _AddExpensePageState extends State<AddExpensePage> {
                   child: Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: buttoncolor,
+                      color: AppColors.buttonColor(themeProvider.isDarkMode),
                       borderRadius: BorderRadius.circular(25),
                     ),
-                    child: const Center(
+                    child: Center(
                       child: Text(
                         "Add",
                         style: TextStyle(
-                          color: white,
+                          color: AppColors.white(themeProvider.isDarkMode),
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
@@ -194,14 +258,14 @@ class _AddExpensePageState extends State<AddExpensePage> {
   }
 
   Widget _buildTextField(
-      String label, TextEditingController controller, IconData icon) {
+      String label, TextEditingController controller, IconData icon, bool isDarkMode) {
     return Container(
       decoration: BoxDecoration(
-        color: white,
+        color: AppColors.white(isDarkMode),
         borderRadius: BorderRadius.circular(25),
         boxShadow: [
           BoxShadow(
-            color: grey.withOpacity(0.03),
+            color: AppColors.grey(isDarkMode).withOpacity(0.03),
             spreadRadius: 10,
             blurRadius: 3,
           ),
@@ -214,23 +278,22 @@ class _AddExpensePageState extends State<AddExpensePage> {
           children: [
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w500,
                 fontSize: 13,
-                color: Color(0xff67727d),
+                color: AppColors.grey(isDarkMode).withOpacity(0.7),
               ),
             ),
             TextField(
               controller: controller,
-              cursorColor: black,
-              style: const TextStyle(
+              cursorColor: AppColors.black(isDarkMode),
+              style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w500,
-                color: black,
+                color: AppColors.black(isDarkMode),
               ),
               decoration: InputDecoration(
-                prefixIcon: Icon(icon),
-                prefixIconColor: black,
+                prefixIcon: Icon(icon, color: AppColors.black(isDarkMode)),
                 hintText: label,
                 border: InputBorder.none,
               ),

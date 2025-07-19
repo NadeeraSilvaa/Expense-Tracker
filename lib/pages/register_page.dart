@@ -1,9 +1,11 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:finance_app/pages/home_page.dart';
-import 'package:finance_app/pages/login_page.dart';
 import 'package:finance_app/theme/colors.dart';
+import 'package:provider/provider.dart';
+import '../utils/theme_provider.dart';
+
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -16,73 +18,65 @@ class _RegisterPageState extends State<RegisterPage> {
   final TextEditingController _name = TextEditingController();
   final TextEditingController _email = TextEditingController();
   final TextEditingController _password = TextEditingController();
-  final TextEditingController _confirmPassword = TextEditingController();
   bool _isLoading = false;
 
   Future<void> _register() async {
-    if (_name.text.isEmpty ||
-    _email.text.isEmpty ||
-    _password.text.isEmpty ||
-    _confirmPassword.text.isEmpty) {
+    if (_name.text.trim().isEmpty ||
+        _email.text.trim().isEmpty ||
+        _password.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please fill in all fields")),
       );
       return;
     }
-    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(_email.text)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter a valid email address")),
-      );
-      return;
-    }
-    if (_password.text.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Password must be at least 6 characters")),
-      );
-      return;
-    }
-    if (_password.text != _confirmPassword.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Passwords do not match")),
-      );
-      return;
-    }
+
     setState(() => _isLoading = true);
     try {
-      UserCredential userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
-          email: _email.text, password: _password.text);
-      String uid = userCredential.user!.uid;
-      await FirebaseFirestore.instance.collection('users').doc(uid).set({
-        'name': _name.text,
-        'email': _email.text,
+      UserCredential userCredential =
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: _email.text.trim(),
+        password: _password.text.trim(),
+      );
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set({
+        'name': _name.text.trim(),
+        'email': _email.text.trim(),
+        'loanBalance': 0.0,
       });
-      Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (context) => const HomePage()));
-    } on FirebaseAuthException catch (e) {
-      String message = e.code == 'email-already-in-use'
-          ? 'Email already in use'
-          : 'Registration failed';
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
-    } finally {
-      setState(() => _isLoading = false);
+      Navigator.pushReplacementNamed(context, '/home');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Registration failed: $e")),
+      );
     }
+    setState(() => _isLoading = false);
   }
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
     return Scaffold(
-      backgroundColor: primary,
+      backgroundColor: AppColors.primary(themeProvider.isDarkMode),
+      appBar: AppBar(
+        backgroundColor: AppColors.primary(themeProvider.isDarkMode),
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(CupertinoIcons.back,
+              color: AppColors.black(themeProvider.isDarkMode)),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
-          child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(25),
             child: Column(
               children: [
-                const SizedBox(height: 50),
                 Container(
-                  width: 70,
-                  height: 70,
+                  width: 100,
+                  height: 100,
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
                     image: DecorationImage(
@@ -92,34 +86,42 @@ class _RegisterPageState extends State<RegisterPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 50),
-                _buildTextField("Name", _name, Icons.person_outline),
-                const SizedBox(height: 20),
-                _buildTextField("Email Address", _email, Icons.email_outlined),
-                const SizedBox(height: 20),
-                _buildTextField("Password", _password, Icons.lock_outline_rounded,
-                    obscureText: true),
+                const SizedBox(height: 10),
+                Text(
+                  "Create an Account",
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.mainFontColor(themeProvider.isDarkMode),
+                  ),
+                ),
                 const SizedBox(height: 20),
                 _buildTextField(
-                    "Confirm Password", _confirmPassword, Icons.lock_outline_rounded,
+                    "Name", _name, Icons.person, themeProvider.isDarkMode),
+                const SizedBox(height: 20),
+                _buildTextField(
+                    "Email", _email, Icons.email, themeProvider.isDarkMode),
+                const SizedBox(height: 20),
+                _buildTextField(
+                    "Password", _password, Icons.lock, themeProvider.isDarkMode,
                     obscureText: true),
                 const SizedBox(height: 20),
                 _isLoading
-                    ? const CircularProgressIndicator()
+                    ? CircularProgressIndicator(
+                    color: AppColors.buttonColor(themeProvider.isDarkMode))
                     : GestureDetector(
                   onTap: _register,
                   child: Container(
                     padding: const EdgeInsets.all(16),
-                    margin: const EdgeInsets.symmetric(horizontal: 25),
                     decoration: BoxDecoration(
-                      color: buttoncolor,
+                      color: AppColors.buttonColor(themeProvider.isDarkMode),
                       borderRadius: BorderRadius.circular(25),
                     ),
-                    child: const Center(
+                    child: Center(
                       child: Text(
                         "Register",
                         style: TextStyle(
-                          color: white,
+                          color: AppColors.white(themeProvider.isDarkMode),
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
                         ),
@@ -131,32 +133,29 @@ class _RegisterPageState extends State<RegisterPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Text(
+                    Text(
                       "Already have an account? ",
                       style: TextStyle(
-                        color: black,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w300,
+                        color: AppColors.black(themeProvider.isDarkMode)
+                            .withOpacity(0.5),
+                        fontSize: 14,
                       ),
                     ),
                     GestureDetector(
-                      onTap: () => Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                              builder: (context) => const LoginPage())),
-                      child: const Text(
+                      onTap: () {
+                        Navigator.pushNamed(context, '/login');
+                      },
+                      child: Text(
                         "Login",
                         style: TextStyle(
-                          color: blue,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                          decoration: TextDecoration.underline,
+                          color: AppColors.buttonColor(themeProvider.isDarkMode),
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
               ],
             ),
           ),
@@ -166,53 +165,46 @@ class _RegisterPageState extends State<RegisterPage> {
   }
 
   Widget _buildTextField(
-      String label, TextEditingController controller, IconData icon,
+      String label, TextEditingController controller, IconData icon, bool isDarkMode,
       {bool obscureText = false}) {
     return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.symmetric(horizontal: 25),
       decoration: BoxDecoration(
-        color: white,
+        color: AppColors.white(isDarkMode),
         borderRadius: BorderRadius.circular(25),
         boxShadow: [
           BoxShadow(
-            color: grey.withOpacity(0.03),
+            color: AppColors.grey(isDarkMode).withOpacity(0.03),
             spreadRadius: 10,
             blurRadius: 3,
           ),
         ],
       ),
       child: Padding(
-        padding:
-        const EdgeInsets.only(left: 20, top: 15, bottom: 5, right: 20),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w500,
                 fontSize: 13,
-                color: Color(0xff67727d),
+                color: AppColors.grey(isDarkMode).withOpacity(0.7),
               ),
             ),
             TextField(
               controller: controller,
+              cursorColor: AppColors.black(isDarkMode),
               obscureText: obscureText,
-              cursorColor: black,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 17,
                 fontWeight: FontWeight.w500,
-                color: black,
+                color: AppColors.black(isDarkMode),
               ),
               decoration: InputDecoration(
-                prefixIcon: Icon(icon),
-                prefixIconColor: black,
+                prefixIcon: Icon(icon, color: AppColors.black(isDarkMode)),
                 hintText: label,
                 border: InputBorder.none,
-                suffixIcon:
-                obscureText ? const Icon(Icons.remove_red_eye_outlined) : null,
-                suffixIconColor: obscureText ? black : null,
               ),
             ),
           ],

@@ -1,14 +1,14 @@
-import 'package:animated_bottom_navigation_bar/animated_bottom_navigation_bar.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:finance_app/pages/settings_page.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/material.dart';
 import 'package:finance_app/pages/daily_page.dart';
+import 'package:finance_app/pages/reports_page.dart';
+import 'package:finance_app/pages/settings_page.dart';
 import 'package:finance_app/pages/transaction_page.dart';
 import 'package:finance_app/theme/colors.dart';
-import 'package:finance_app/pages/reports_page.dart';
-import 'package:finance_app/pages/add_expense_page.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../utils/theme_provider.dart';
+
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -18,86 +18,81 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  int pageIndex = 0;
+  int _currentIndex = 0;
 
-  final List<Widget> pages = [
+  final List<Widget> _pages = [
     const DailyPage(),
     const TransactionPage(),
     const ReportsPage(),
     const SettingsPage(),
   ];
 
-  Future<Map<String, dynamic>> getUserData() async {
-    String? uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid != null) {
-      DocumentSnapshot doc =
-      await FirebaseFirestore.instance.collection('users').doc(uid).get();
-      if (doc.exists) {
-        return doc.data() as Map<String, dynamic>;
-      }
-    }
-    return {};
+  void onTabTapped(int index) {
+    setState(() {
+      _currentIndex = index;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider>(context);
     return Scaffold(
-      backgroundColor: primary,
-      body: getBody(),
-      bottomNavigationBar: getFooter(),
-      floatingActionButton: SafeArea(
-        child: SizedBox(
-          child: FloatingActionButton(
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const AddExpensePage()),
-              );
-            },
-            child: const Icon(Icons.add, size: 20),
-            backgroundColor: buttoncolor,
-          ),
-        ),
+      backgroundColor: AppColors.primary(themeProvider.isDarkMode),
+      body: _pages[_currentIndex],
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.pushNamed(context, '/add_expense');
+        },
+        backgroundColor: AppColors.buttonColor(themeProvider.isDarkMode),
+        child: Icon(Icons.add, color: AppColors.white(themeProvider.isDarkMode)),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: onTabTapped,
+        selectedItemColor: AppColors.buttonColor(themeProvider.isDarkMode),
+        unselectedItemColor: AppColors.grey(themeProvider.isDarkMode),
+        backgroundColor: AppColors.white(themeProvider.isDarkMode),
+        type: BottomNavigationBarType.fixed,
+        items: [
+          BottomNavigationBarItem(
+            icon: Icon(
+              CupertinoIcons.square_list,
+              color: _currentIndex == 0
+                  ? AppColors.buttonColor(themeProvider.isDarkMode)
+                  : AppColors.grey(themeProvider.isDarkMode),
+            ),
+            label: 'Daily',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(
+              Icons.compare_arrows_rounded,
+              color: _currentIndex == 1
+                  ? AppColors.buttonColor(themeProvider.isDarkMode)
+                  : AppColors.grey(themeProvider.isDarkMode),
+            ),
+            label: 'Transactions',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(
+              Icons.bar_chart,
+              color: _currentIndex == 2
+                  ? AppColors.buttonColor(themeProvider.isDarkMode)
+                  : AppColors.grey(themeProvider.isDarkMode),
+            ),
+            label: 'Reports',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(
+              Icons.settings,
+              color: _currentIndex == 3
+                  ? AppColors.buttonColor(themeProvider.isDarkMode)
+                  : AppColors.grey(themeProvider.isDarkMode),
+            ),
+            label: 'Settings',
+          ),
+        ],
+      ),
     );
-  }
-
-  Widget getBody() {
-    return IndexedStack(
-      index: pageIndex,
-      children: pages,
-    );
-  }
-
-  Widget getFooter() {
-    List<IconData> iconItems = [
-      CupertinoIcons.home,
-      CupertinoIcons.creditcard,
-      CupertinoIcons.money_dollar,
-      CupertinoIcons.person,
-    ];
-    return AnimatedBottomNavigationBar(
-      backgroundColor: primary,
-      icons: iconItems,
-      splashColor: secondary,
-      inactiveColor: black.withOpacity(0.5),
-      gapLocation: GapLocation.center,
-      activeIndex: pageIndex,
-      notchSmoothness: NotchSmoothness.softEdge,
-      leftCornerRadius: 10,
-      iconSize: 25,
-      rightCornerRadius: 10,
-      elevation: 2,
-      onTap: (index) {
-        setTabs(index);
-      },
-    );
-  }
-
-  void setTabs(int index) {
-    setState(() {
-      pageIndex = index;
-    });
   }
 }
